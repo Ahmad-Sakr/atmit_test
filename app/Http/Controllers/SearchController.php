@@ -3,33 +3,45 @@
 namespace App\Http\Controllers;
 
 use App\Models\Material;
+use App\Models\Type;
+use Illuminate\Http\Request;
 
 class SearchController extends Controller
 {
-    //Light with Color: Off White
-    //Wood Board with Length: 110
-    //Wood Board with Length: 120 and Color: White
-
     public function index()
     {
-        $materials = Material::query()
-            ->with(['type', 'values.attribute_type.attribute'])
-            ->whereHas('type', function($query) {
-                $query->where('title', 'Wood Board');
-            })
-            ->whereHas('values', function($query) {
-                $query->where('value', 110)
-                        ->whereHas('attribute_type.attribute', function ($query) {
-                            $query->where('title', 'Length');
+        $types = Type::query()->with('attribute_types.attribute', 'attribute_types.values')->get();
+        return view('search', compact('types'));
+    }
+
+    public function search(Request $request)
+    {
+        $builder = Material::query()->with(['type', 'values.attribute_type.attribute']);
+
+        //Add type Filter
+        $type = $request->input('type', '');
+        if($type !== '') {
+            $builder->whereHas('type', function($query) use ($type) {
+                            $query->where('title', $type);
                         });
-            })
-            ->whereHas('values', function($query) {
-                $query->where('value', 60)
-                    ->whereHas('attribute_type.attribute', function ($query) {
-                        $query->where('title', 'Width');
-                    });
-            })
-            ->get();
+        }
+
+        //Add Attributes Filter
+        $attributes = $request->input('attribute', []);
+        $values = $request->input('value', []);
+        foreach ($attributes as $attribute) {
+            if(array_key_exists($attribute, $values)) {
+                $value = $values[$attribute];
+                $builder->whereHas('values', function($query) use ($attribute, $value) {
+                            $query->where('value', $value)
+                                ->whereHas('attribute_type.attribute', function ($query) use ($attribute) {
+                                    $query->where('title', $attribute);
+                                });
+                        });
+            }
+        }
+
+        $materials = $builder->get();
         return view('result', compact('materials'));
     }
 }
